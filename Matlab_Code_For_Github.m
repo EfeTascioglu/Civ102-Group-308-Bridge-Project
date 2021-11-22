@@ -1,7 +1,11 @@
 %% 0. Initialize Parameters 
 n = 1250;                  % Number of locations to evaluate bridge failure 
 L = 1250;                  % Length of bridge 
-  
+
+%%%%%%%%%%% ALL VALUES ARE IN TERMS OF P, BUT JUST NEED TO WRITE "P" AT THE
+%%%%%%%%%%% END
+
+
 x = linspace(0, L, n);     % Define x coordinate 
 SFD_PL = zeros(1, n);      % Initialize SFD(x) 
   
