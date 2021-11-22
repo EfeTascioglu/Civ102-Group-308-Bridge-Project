@@ -7,8 +7,10 @@ SFD_PL = zeros(1, n);      % Initialize SFD(x)
   
 %% 1. Point Loading Analysis (SFD, BMD) 
 P = 318; 
-% [SFD_PL, BMD_PL] = ApplyPL(550, P, x, SFD_PL);      % Construct SFD, BMD 
-% [SFD_PL, BMD_PL] = ApplyPL(L, P, x, SFD_PL);        % Construct SFD, BMD 
+%[SFD_PL, BMD_PL] = ApplyPL(550, P, x, SFD_PL);      % Construct SFD, BMD 
+%[SFD_PL, BMD_PL] = ApplyPL(L, P, x, SFD_PL);        % Construct SFD, BMD 
+[SFD, BMD] = ApplyPL(300,1000,x,SFD_PL)
+
   
 %% 2. Define cross-sections 
 % There are many (more elegant ways) to construct cross-section objects 
@@ -54,6 +56,7 @@ mu   = 0.2;
 % Defls = Deflections(x, BMD_PL, I, E); 
 
 
+
 function [ y_bar ] = CalculateYBar (areas, distances)
     y_bar = (areas .* distances) / sum(areas)
 end
@@ -64,9 +67,22 @@ end
 
 
 function [ SFD, BMD ] = ApplyPL( xP, P, x, SFD )
-    By = xP.*P 
-    
+    dist_A_to_B = 550 %in mm 
+    By = sum(xP.*P) / dist_A_to_B
+    Ay = sum(P)-By
+    Forces = Ay*ones(0,1250)
+    Forces(xP:end) = Forces(xP:end)-P
+    Forces(dist_A_to_B:end) = Forces(dist_A_to_B:end) + By
+    SFD = Forces
+    %want to plot BMD and SFD 
+    BMD = zeros(1,1250)
+    BMD(xP) = BMD(1)-Forces(xP)*xP
+    BMD(dist_A_to_B) = BMD(xP)-Forces(xP)*(dist_A_to_B-xP)
+    plot(x,Forces, "b")
+    %plot(x,BMD,"k")
 end 
+
+
 % Constructs SFD and BMD from application of 1 Point Load. Assumes fixed location of supports 
 % Input: location and magnitude of point load. The previous SFD can be entered as input to  
 %  construct SFD of multiple point loads 
@@ -155,5 +171,6 @@ end
 % % Calculates deflections 
 % % Input: I(1-D arrays), E (material property), BMD (1-D array) 
 % % Output: Deflection for every value of x (1-D array) or for the midspan only  
+
 
 
