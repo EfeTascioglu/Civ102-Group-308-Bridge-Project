@@ -57,20 +57,13 @@ function [ y_bar ] = CalculateYBar (areas, distances)
     y_bar = (areas .* distances) / sum(areas)
 end
 
-function [I] = CalcI(b,h,y_bar, dists_from_centroid) %b, h, dist_from_centroid are all vectors
-    I = sum(b*h.^3/12) + b.*h.*(dists_from_centroid-y_bar).^2 %assuming all of the components are rectangles 
+function [I] = CalcI(b,h,ybar, areas, dist_from_centroid)
+    I = sum(b*h.^3/12)
 
-end 
-
-
-function [ SFD, BMD ] = ApplyPL( xP, P, x, SFD )
-    By = xP.*P 
-    
-end 
+function [ SFD, BMD ] = ApplyPL( xP, P, x, SFD ) 
 % Constructs SFD and BMD from application of 1 Point Load. Assumes fixed location of supports 
 % Input: location and magnitude of point load. The previous SFD can be entered as input to  
 %  construct SFD of multiple point loads 
-
 % Output: SFD, BMD both 1-D arrays of length n 
  
 function [  ] = VisualizeBridge( {Geometric Inputs} ) 
@@ -124,4 +117,3 @@ function [ M_MatT ] = MfailMatC( {Sectional Properties}, SigC, BMD ) % Similar t
 % Calculates deflections 
 % Input: I(1-D arrays), E (material property), BMD (1-D array) 
 % Output: Deflection for every value of x (1-D array) or for the midspan only  
-
