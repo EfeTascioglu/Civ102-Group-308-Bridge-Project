@@ -9,7 +9,7 @@ SFD_PL = zeros(1, n);      % Initialize SFD(x)
 P = 318; 
 %[SFD_PL, BMD_PL] = ApplyPL(550, P, x, SFD_PL);      % Construct SFD, BMD 
 %[SFD_PL, BMD_PL] = ApplyPL(L, P, x, SFD_PL);        % Construct SFD, BMD 
-[SFD, BMD] = ApplyPL(300,1000,x,SFD_PL)
+%[SFD, BMD] = ApplyPL(300,1000,x,SFD_PL)
 
   
 %% 2. Define cross-sections 
@@ -57,6 +57,7 @@ mu   = 0.2;
 
 
 
+
 function [ y_bar ] = CalculateYBar (areas, distances)
     y_bar = (areas .* distances) / sum(areas)
 end
@@ -64,23 +65,23 @@ end
 function [ I ] = CalcI(b,h,y_bar, dists_from_centroid) %b, h, dist_from_centroid are all vectors
     I = sum(b*h.^3/12) + b.*h.*(dists_from_centroid-y_bar).^2 %assuming all of the components are rectangles 
 end 
-
-
-function [ SFD, BMD ] = ApplyPL( xP, P, x, SFD )
-    dist_A_to_B = 550 %in mm 
-    By = sum(xP.*P) / dist_A_to_B
-    Ay = sum(P)-By
-    Forces = Ay*ones(0,1250)
-    Forces(xP:end) = Forces(xP:end)-P
-    Forces(dist_A_to_B:end) = Forces(dist_A_to_B:end) + By
-    SFD = Forces
-    %want to plot BMD and SFD 
-    BMD = zeros(1,1250)
-    BMD(xP) = BMD(1)-Forces(xP)*xP
-    BMD(dist_A_to_B) = BMD(xP)-Forces(xP)*(dist_A_to_B-xP)
-    plot(x,Forces, "b")
-    %plot(x,BMD,"k")
-end 
+% 
+% 
+% function [ SFD, BMD ] = ApplyPL( xP, P, x, SFD )
+%     dist_A_to_B = 550 %in mm 
+%     By = sum(xP.*P) / dist_A_to_B
+%     Ay = sum(P)-By
+%     Forces = Ay*ones(0,1250)
+%     Forces(xP:end) = Forces(xP:end)-P
+%     Forces(dist_A_to_B:end) = Forces(dist_A_to_B:end) + By
+%     SFD = Forces
+%     %want to plot BMD and SFD 
+%     BMD = zeros(1,1250)
+%     BMD(xP) = BMD(1)-Forces(xP)*xP
+%     BMD(dist_A_to_B) = BMD(xP)-Forces(xP)*(dist_A_to_B-xP)
+%     plot(x,Forces, "b")
+%     %plot(x,BMD,"k")
+% end 
 
 
 % Constructs SFD and BMD from application of 1 Point Load. Assumes fixed location of supports 
@@ -171,6 +172,7 @@ end
 % % Calculates deflections 
 % % Input: I(1-D arrays), E (material property), BMD (1-D array) 
 % % Output: Deflection for every value of x (1-D array) or for the midspan only  
+
 
 
 
