@@ -115,3 +115,4 @@ function [ M_MatT ] = MfailMatC( {Sectional Properties}, SigC, BMD ) % Similar t
 % Calculates deflections 
 % Input: I(1-D arrays), E (material property), BMD (1-D array) 
 % Output: Deflection for every value of x (1-D array) or for the midspan only  
+
