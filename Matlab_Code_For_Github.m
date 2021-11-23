@@ -1,15 +1,22 @@
 %% 0. Initialize Parameters 
-n = 1000;                  % Number of locations to evaluate bridge failure 
+n = 1250;                  % Number of locations to evaluate bridge failure 
 L = 1250;                  % Length of bridge 
-  
+
+%%%%%%%%%%% ALL VALUES ARE IN TERMS OF P, BUT JUST NEED TO WRITE "P" AT THE
+%%%%%%%%%%% END
+
+
 x = linspace(0, L, n);     % Define x coordinate 
 SFD_PL = zeros(1, n);      % Initialize SFD(x) 
   
 %% 1. Point Loading Analysis (SFD, BMD) 
-P = 318; 
+% Calculate Forces
+xP = [550, 1250]
+P = [1, 1]; 
+
 %[SFD_PL, BMD_PL] = ApplyPL(550, P, x, SFD_PL);      % Construct SFD, BMD 
 %[SFD_PL, BMD_PL] = ApplyPL(L, P, x, SFD_PL);        % Construct SFD, BMD 
-%[SFD, BMD] = ApplyPL(300,1000,x,SFD_PL)
+[SFD, BMD] = ApplyPL(xP,P,x,SFD_PL)
 
   
 %% 2. Define cross-sections 
@@ -33,7 +40,9 @@ SigC = 6;
 E    = 4000; 
 TauU = 4; 
 TauG = 2; 
-mu   = 0.2; 
+mu   = 0.2;
+
+
   
 %% 4. Calculate Failure Moments and Shear Forces 
 % V_Mat = Vfail({CrossSectionInputs}, TauU); 
@@ -54,34 +63,71 @@ mu   = 0.2;
   
 %% 5. Curvature, Slope, Deflections 
 % Defls = Deflections(x, BMD_PL, I, E); 
+h = [1.27 1.27 1.27 75-3*1.27 75-3*1.27 1.27] %for debugging
+b = [100 10 10 1.27 1.27 80] %for debugging 
+areas = b.*h
+
+distances = [(75-1.27/2) 75-1.27-(1.27/2) 75-1.27-(1.27/2) (75-1.27)/2 (75-1.27)/2 1.27/2]
 
 
+y_bar = CalculateYBar(areas, distances)
+I = CalcI(b,h,y_bar, distances)
 
 
 function [ y_bar ] = CalculateYBar (areas, distances)
-    y_bar = (areas .* distances) / sum(areas)
+    y_bar = sum((areas .* distances)) / sum(areas)
 end
 
 function [ I ] = CalcI(b,h,y_bar, dists_from_centroid) %b, h, dist_from_centroid are all vectors
-    I = sum(b*h.^3/12) + b.*h.*(dists_from_centroid-y_bar).^2 %assuming all of the components are rectangles 
+    I = sum(b.*h.^3/12) + sum(b.*h.*(dists_from_centroid-y_bar).^2) %assuming all of the components are rectangles 
 end 
-% 
-% 
-% function [ SFD, BMD ] = ApplyPL( xP, P, x, SFD )
-%     dist_A_to_B = 550 %in mm 
-%     By = sum(xP.*P) / dist_A_to_B
-%     Ay = sum(P)-By
-%     Forces = Ay*ones(0,1250)
-%     Forces(xP:end) = Forces(xP:end)-P
-%     Forces(dist_A_to_B:end) = Forces(dist_A_to_B:end) + By
-%     SFD = Forces
-%     %want to plot BMD and SFD 
-%     BMD = zeros(1,1250)
-%     BMD(xP) = BMD(1)-Forces(xP)*xP
-%     BMD(dist_A_to_B) = BMD(xP)-Forces(xP)*(dist_A_to_B-xP)
-%     plot(x,Forces, "b")
-%     %plot(x,BMD,"k")
-% end 
+
+function [ Ay, By ] = CalcSupportForces( xP, P )
+    dist_A_to_B = 1060 %in mm (Assuming Point-Load)
+    By = sum(xP.*P) / dist_A_to_B
+    %By = sum((xP - dist_A_to_B).*P) % Clockwise Positive
+    Ay = sum(P)-By
+end
+
+function [ BMD ] = CalculateBMD(SFD, x)
+    BMD = cumsum(SFD)*((x(2)-x(1))/1) % Convert to mm
+end
+
+function [ SFD, BMD ] = ApplyPL( xP, P, x, SFD )
+    dist_A_to_B = 1060 %in mm (Assuming Point-Load)
+    [Ay, By] = CalcSupportForces( xP, P )
+    SFD = Ay*ones(1,1250)
+    SFD(xP:end) = SFD(xP:end)-P(1)
+    SFD(dist_A_to_B:end) = SFD(dist_A_to_B:end) + By
+
+    %want to plot BMD and SFD 
+    BMD = CalculateBMD(SFD, x)
+    %BMD(xP) = BMD(1)-SFD(xP).*xP
+    %BMD(dist_A_to_B) = BMD(xP)-SFD(xP).*(dist_A_to_B-xP(i))
+    
+    % PLOT SFD
+    SFD(1) = 0; % Just to make the graph pretty
+    SFD(end) = 0;
+    plot(x,SFD, "b")
+    hold on
+    plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
+    axis([0, 1250, min(SFD) * 1.2, max(SFD) * 1.2])
+    title("Shear Force Diagram")
+    ylabel("Shear Force (N) (up on left, down on right is positive)")
+    xlabel("Position (mm)")
+    hold off    
+    
+    % PLOT BMD
+    figure
+    plot(x,BMD,"r")
+    hold on
+    plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
+    axis([0, 1250, min(BMD) * 1.2, max(BMD) * 1.2])
+    title("Bending Moment Diagram")
+    ylabel("Bending Moment (Nm) (tension on bottom is positive)")
+    xlabel("Position (mm)")
+    hold off
+end 
 
 
 % Constructs SFD and BMD from application of 1 Point Load. Assumes fixed location of supports 
@@ -89,7 +135,8 @@ end
 %  construct SFD of multiple point loads 
 
 % Output: SFD, BMD both 1-D arrays of length n 
- 
+
+
 function [  ] = VisualizeBridge( xc, bft, tft, hw, tw, spacing_web, bfb, tfb, a ) 
 % Optional. Provides a graphical interpretation of user geometric inputs 
     
@@ -133,30 +180,55 @@ end
 % % Output: V_fail a 1-D array of length n 
 %     I = {Sectional Properties}; 
 %     b = {Sectional Properties}; 
-% Qcent = {Sectional Properties}; 
+
+function [Qcent] = CalcQcent(top_areas, local_centroidal_heights) %calculating from the top , calculate local_centroidal_heights of the top half of the structure beforehand 
+    Qcent = sum(areas.*((local_centroidal_heights)))
+end
+%  function [ {Sectional Properties} ] = SectionProperties( {Geometric Inputs} ) % Calculates important sectional properties. Including but not limited to ybar, I, Q, etc. 
+% % Input: Geometric Inputs. Format will depend on user 
+% % Output: Sectional Properties at every value of x. Each property is a 1-D array of length n 
 %  
-%     V_fail = TauU .* I .* b ./ Qcent;  
-% end 
-%  function [ V_Buck ] = VfailBuck( {Sectional Properties}, E, mu )  
-% % Calculates shear forces at every value of x that would cause a shear buckling failure in the web 
-% % Input: Sectional Properties (list of 1-D arrays), E, mu (material property) 
-% % Output: V_Buck a 1-D array of length n 
-%  function [ M_MatT ] = MfailMatT( {Sectional Properties}, SigT, BMD )  
+function [ V_fail ] = CalcVfail( Qcent, I, b, TauU ) 
+% % Calculates shear forces at every value of x that would cause a matboard shear failure 
+% % Input: Sectional Properties (list of 1-D arrays), TauU (scalar material property) 
+% % Output: V_fail a 1-D array of length n 
+     V_fail = TauU .* I .* b ./ Qcent;  %give out result in newtons 
+end 
+
+function [ybot, ytop] = CalcYbotYtop(height, y_bar)
+    ybot = y_bar
+    ytop = height - y_bar
+end
+
+
+
+function [ M_MatT ] = MfailMatT( ybot, ytop, I, SigT, BMD )  
 % % Calculates bending moments at every value of x that would cause a matboard tension failure 
 % % Input: Sectional Properties (list of 1-D arrays), SigT (material property), BMD (1-D array) 
 % % Output: M_MatT a 1-D array of length n 
-% [I, ybot, ytop] = {Sectional Properties}; 
-%   
-% for i = 1 : length(x)    
-%         if BMD(i) > 0 % If the moment is positive, the tension failure will be at the bottom 
-%         M_MatT(i) = SigT * I(i) / ybot(i); 
-%         elseif BMD(i) < 0 % If the moment is negative, the tension failure will be at the top 
-%             M_MatT(i) = -SigT * I(i) / ytop(i); 
-%         end 
-%     end 
-% end 
-%  
-% function [ M_MatT ] = MfailMatC( {Sectional Properties}, SigC, BMD ) % Similar to MfailMatT 
+    M_MatT = zeros(1,1250)
+    for i = 1 : length(x)    
+            if BMD(i) > 0 % If the moment is positive, the tension failure will be at the bottom 
+                M_MatT(i) = SigT * I(i) / ybot(i); 
+            elseif BMD(i) < 0 % If the moment is negative, the tension failure will be at the top 
+                M_MatT(i) = -SigT * I(i) / ytop(i); 
+            end 
+    end 
+
+end 
+
+function [ M_MatT ] = MfailMatC(ybot, ytop, I, SigT, BMD) % Similar to MfailMatT 
+      M_MatT = zeros(1,1250)
+
+      for i = 1 : length(x)    
+            if BMD(i) > 0 % If the moment is positive, the tension failure will be at the bottom 
+                M_MatT(i) = SigT * I(i) / ytop(i); 
+            elseif BMD(i) < 0 % If the moment is negative, the tension failure will be at the top 
+                M_MatT(i) = -SigT * I(i) / ybot(i); 
+            end 
+    end 
+
+end
 %  function [ M_Buck ] = MfailBuck( {Sectional Properties}, E, mu, BMD )  
 % % Calculates bending moments at every value of x that would cause a buckling failure 
 % % Input: Sectional Properties (list of 1-D arrays), E, mu (material property), BMD (1-D array) 
