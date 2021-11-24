@@ -10,13 +10,14 @@ x = linspace(0, L, n);     % Define x coordinate
 SFD_PL = zeros(1, n);      % Initialize SFD(x) 
   
 %% 1. Point Loading Analysis (SFD, BMD) 
-% Calculate Forces
-xP = [550, 1250]
-P = [1, 1]; 
 
-%[SFD_PL, BMD_PL] = ApplyPL(550, P, x, SFD_PL);      % Construct SFD, BMD 
-%[SFD_PL, BMD_PL] = ApplyPL(L, P, x, SFD_PL);        % Construct SFD, BMD 
-[SFD, BMD] = ApplyPL(xP,P,x,SFD_PL)
+% Calculate Forces
+xP = [550, 1250];
+P = [1, 1]; 
+% Calculate Supports
+xS = [0, 1060];
+S = [0, 0];
+[S(1), S(2)] = CalcSupportForces( xP, P, xS );
 
   
 %% 2. Define cross-sections 
@@ -24,16 +25,22 @@ P = [1, 1];
 xc = [0 550 L];  % Location, x, of cross-section change 
 bft = [100 100 100]; % Top Flange Width 
 tft = [2.54 2.54 2.54]; % Top Flange Thickness 
-hw = [100 120 100];  % Web Height 
+hw = [75-1.27*2, 75-1.27*2, 75-1.27*2];  % Web Height 
 tw = [1.27 1.27 1.27]; % Web Thickness (Assuming 2 separate webs) 
 spacing_web = [80 80 80]; % Includes width of the Flange
 bfb = [80 80 80];  % Bottom Flange Width 
 tfb = [1.27 1.27 1.27]; % Bottom Flange Thickness 
-a = [400 400 400];   % Diaphragm Spacing 
-  
+a = [0 200 400 600 800 1000 1200];   % Position of Diaphrams
+
 % Optional but you need to ensure that your geometric inputs are correctly implemented 
 VisualizeBridge( xc, bft, tft, hw, tw, spacing_web, bfb, tfb, a );  
-  
+ 
+
+%[SFD_PL, BMD_PL] = ApplyPL(550, P, x, SFD_PL);      % Construct SFD, BMD 
+%[SFD_PL, BMD_PL] = ApplyPL(L, P, x, SFD_PL);        % Construct SFD, BMD 
+[SFD, BMD] = ApplyPL(x,xP,P,xS,S);
+
+
 %% 3. Define Material Properties 
 SigT = 30; 
 SigC = 6; 
@@ -63,8 +70,8 @@ mu   = 0.2;
   
 %% 5. Curvature, Slope, Deflections 
 % Defls = Deflections(x, BMD_PL, I, E); 
-h = [1.27 1.27 1.27 75-3*1.27 75-3*1.27 1.27] %for debugging
-b = [100 10 10 1.27 1.27 80] %for debugging 
+h = [1.27 1.27 1.27 75-3*1.27 75-3*1.27 1.27]; %for debugging
+b = [100 10 10 1.27 1.27 80]; %for debugging 
 areas = b.*h
 
 distances = [(75-1.27/2) 75-1.27-(1.27/2) 75-1.27-(1.27/2) (75-1.27)/2 (75-1.27)/2 1.27/2]
@@ -72,19 +79,48 @@ distances = [(75-1.27/2) 75-1.27-(1.27/2) 75-1.27-(1.27/2) (75-1.27)/2 (75-1.27)
 
 y_bar = CalculateYBar(areas, distances)
 I = CalcI(b,h,y_bar, distances)
+[y_bar_vector, I_vector] = Calc_Cross_Section_Properties(xc, bft, tft, hw, tw, spacing_web, bfb, tfb, a)
 
 
 function [ y_bar ] = CalculateYBar (areas, distances)
-    y_bar = sum((areas .* distances)) / sum(areas)
+    y_bar = sum((areas .* distances)) / sum(areas);
 end
 
 function [ I ] = CalcI(b,h,y_bar, dists_from_centroid) %b, h, dist_from_centroid are all vectors
-    I = sum(b.*h.^3/12) + sum(b.*h.*(dists_from_centroid-y_bar).^2) %assuming all of the components are rectangles 
+    I = sum(b.*h.^3/12) + sum(b.*h.*(dists_from_centroid-y_bar).^2); %assuming all of the components are rectangles 
 end 
 
-function [ Ay, By ] = CalcSupportForces( xP, P )
-    dist_A_to_B = 1060 %in mm (Assuming Point-Load)
-    By = sum(xP.*P) / dist_A_to_B
+%%%%%%%%%%%%%%%%%ADD CALCULATION FOR DIAPHRAMS
+function [ y_bar_vector, I_vector ] = Calc_Cross_Section_Properties(xc, bft, tft, hw, tw, spacing_web, bfb, tfb, a)
+%     xc = [0 550 L];  % Location, x, of cross-section change 
+%     bft = [100 100 100]; % Top Flange Width 
+%     tft = [2.54 2.54 2.54]; % Top Flange Thickness 
+%     hw = [100 120 100];  % Web Height 
+%     tw = [1.27 1.27 1.27]; % Web Thickness (Assuming 2 separate webs) 
+%     spacing_web = [80 80 80]; % Includes width of the Flange
+%     bfb = [80 80 80];  % Bottom Flange Width 
+%     tfb = [1.27 1.27 1.27]; % Bottom Flange Thickness 
+%     a = [400 400 400];   % Diaphragm Spacing 
+    I_vector = zeros(1,xc(end))
+    y_bar_vector = zeros(1,xc(end))
+    for interval = 1:length(xc) - 1
+        % Assume Flaps used for gluing are not significant
+        %    Base of top,   total base of web, base of bot
+        b = [bft(interval), 2*tw(interval), bfb(interval)]
+        h = [tft(interval), hw(interval), tfb(interval)]
+        areas = b.*h
+        heights = [hw(interval)+tfb(interval)+tft(interval)/2, tfb(interval)/2, tfb(interval)+hw(interval)/2]
+        for x_value = xc(interval)+1:xc(interval + 1)
+            y_bar_vector(x_value) = CalculateYBar( areas, heights);
+            I_vector(x_value) = CalcI(b, h, y_bar_vector(x_value), heights - y_bar_vector(x_value));
+        end
+    end
+    
+end
+
+function [ Ay, By ] = CalcSupportForces( xP, P, xS )
+    % Calculate the support forces in "N"s
+    By = sum((xP-xS(1)).*P) / xS(2) - xS(1)
     %By = sum((xP - dist_A_to_B).*P) % Clockwise Positive
     Ay = sum(P)-By
 end
@@ -93,12 +129,11 @@ function [ BMD ] = CalculateBMD(SFD, x)
     BMD = cumsum(SFD)*((x(2)-x(1))/1) % Convert to mm
 end
 
-function [ SFD, BMD ] = ApplyPL( xP, P, x, SFD )
-    dist_A_to_B = 1060 %in mm (Assuming Point-Load)
-    [Ay, By] = CalcSupportForces( xP, P )
-    SFD = Ay*ones(1,1250)
+function [ SFD, BMD ] = ApplyPL( x, xP, P, xS, S )
+    dist_A_to_B = xS(2) - xS(1)
+    SFD = S(1)*ones(1,1250)
     SFD(xP:end) = SFD(xP:end)-P(1)
-    SFD(dist_A_to_B:end) = SFD(dist_A_to_B:end) + By
+    SFD(dist_A_to_B:end) = SFD(dist_A_to_B:end) + S(2)
 
     %want to plot BMD and SFD 
     BMD = CalculateBMD(SFD, x)
@@ -217,16 +252,18 @@ function [ M_MatT ] = MfailMatT( ybot, ytop, I, SigT, BMD )
 
 end 
 
-function [ M_MatT ] = MfailMatC(ybot, ytop, I, SigT, BMD) % Similar to MfailMatT 
-      M_MatT = zeros(1,1250)
-
+function [ P_fail ] = MfailMatC(ybot, ytop, I, Stress_fail, BMD) % Similar to MfailMatT 
+      M_fail = zeros(1,1250)
+      
       for i = 1 : length(x)    
             if BMD(i) > 0 % If the moment is positive, the tension failure will be at the bottom 
-                M_MatT(i) = SigT * I(i) / ytop(i); 
+                M_fail(i) = Stress_fail * I(i) / ytop(i); 
             elseif BMD(i) < 0 % If the moment is negative, the tension failure will be at the top 
-                M_MatT(i) = -SigT * I(i) / ybot(i); 
+                M_fail(i) = -Stress_fail * I(i) / ybot(i); 
             end 
-    end 
+      end 
+      
+      P_fail = M_fail ./ BMD
 
 end
 %  function [ M_Buck ] = MfailBuck( {Sectional Properties}, E, mu, BMD )  
@@ -244,6 +281,7 @@ end
 % % Calculates deflections 
 % % Input: I(1-D arrays), E (material property), BMD (1-D array) 
 % % Output: Deflection for every value of x (1-D array) or for the midspan only  
+
 
 
 
