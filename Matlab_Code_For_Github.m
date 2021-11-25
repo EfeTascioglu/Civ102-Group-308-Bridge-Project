@@ -24,7 +24,7 @@ S = [0, 0];
 % There are many (more elegant ways) to construct cross-section objects 
 xc = [0 550 L];  % Location, x, of cross-section change 
 bft = [100 100 100]; % Top Flange Width 
-tft = [2.54 2.54 2.54]; % Top Flange Thickness 
+tft = [1.27 1.27 1.27]; % Top Flange Thickness 
 hw = [75-1.27*2, 75-1.27*2, 75-1.27*2];  % Web Height 
 tw = [1.27 1.27 1.27]; % Web Thickness (Assuming 2 separate webs) 
 spacing_web = [80 80 80]; % Includes width of the Flange
@@ -76,10 +76,24 @@ areas = b.*h
 
 distances = [(75-1.27/2) 75-1.27-(1.27/2) 75-1.27-(1.27/2) (75-1.27)/2 (75-1.27)/2 1.27/2]
 
-
 y_bar = CalculateYBar(areas, distances)
 I = CalcI(b,h,y_bar, distances)
 [y_bar_vector, I_vector] = Calc_Cross_Section_Properties(xc, bft, tft, hw, tw, spacing_web, bfb, tfb, a)
+
+top_areas = [1.27*100 1.27*10 1.27*10 (75-(1.27*2)-y_bar)*1.27 (75-(1.27*2)-y_bar)*1.27]
+top_dist_from_centroid = [(75-1.27/2)-y_bar, 75-1.27-(1.27/2)-y_bar, 75-1.27-(1.27/2)-y_bar, (75-2*1.27-y_bar)/2 (75-2*1.27-y_bar)/2] 
+top_areas = repmat(top_areas,1250,1)
+top_dist_from_centroid = repmat(top_dist_from_centroid,1250,1)
+b = repmat(1.27,1250,1)
+I_vec = I*ones(1,1250) %let I be constant for design zero 
+Qcent = CalcQcent(top_areas, top_dist_from_centroid);%for debugging, for design 0 
+Vfail = CalcVfail(Qcent, I_vec, b, TauU, SFD); %for debugging, for design 0
+[Ybot, Ytop] = CalcYbotYtop(75, y_bar)
+Ybot_vec = Ybot*ones(1,1250)
+Ytop_vec = Ytop*ones(1,1250)
+
+M_MatT = MfailMatT(Ybot_vec, Ytop_vec, I_vec, SigT, BMD) %insert Ybot, Ytop, I as vectors 
+M_MatC = MfailMatC(Ybot_vec, Ytop_vec, I_vec, SigT, BMD) %insert Ybot, Ytop, I as vectors 
 
 
 function [ y_bar ] = CalculateYBar (areas, distances)
@@ -92,7 +106,22 @@ end
 
 %%%%%%%%%%%%%%%%%ADD CALCULATION FOR DIAPHRAMS
 function [ y_bar_vector, I_vector ] = Calc_Cross_Section_Properties(xc, bft, tft, hw, tw, spacing_web, bfb, tfb, a)
-%     xc = [0 550 L];  % Location, x, of cross-section change 
+    I_vector = zeros(1,xc(end))
+    y_bar_vector = zeros(1,xc(end))
+    for interval = 1:length(xc) - 1
+        % Assume Flaps used for gluing are not significant
+        %    Base of top,   total base of web, base of bot
+        b = [bft(interval), tw(interval), tw(interval), bfb(interval)]
+        h = [tft(interval), hw(interval), hw(interval), tfb(interval)]
+        areas = b.*h
+        heights = [hw(interval)+tfb(interval)+tft(interval)/2, (tfb(interval)+hw(interval))/2, (tfb(interval)+hw(interval))/2, tfb(interval)/2];
+        for x_value = xc(interval)+1:xc(interval + 1)
+            y_bar_vector(x_value) = CalculateYBar( areas, heights);
+            I_vector(x_value) = CalcI(b, h, y_bar_vector(x_value), heights);
+           
+        end
+    end
+    %     xc = [0 550 L];  % Location, x, of cross-section change 
 %     bft = [100 100 100]; % Top Flange Width 
 %     tft = [2.54 2.54 2.54]; % Top Flange Thickness 
 %     hw = [100 120 100];  % Web Height 
@@ -101,20 +130,6 @@ function [ y_bar_vector, I_vector ] = Calc_Cross_Section_Properties(xc, bft, tft
 %     bfb = [80 80 80];  % Bottom Flange Width 
 %     tfb = [1.27 1.27 1.27]; % Bottom Flange Thickness 
 %     a = [400 400 400];   % Diaphragm Spacing 
-    I_vector = zeros(1,xc(end))
-    y_bar_vector = zeros(1,xc(end))
-    for interval = 1:length(xc) - 1
-        % Assume Flaps used for gluing are not significant
-        %    Base of top,   total base of web, base of bot
-        b = [bft(interval), 2*tw(interval), bfb(interval)]
-        h = [tft(interval), hw(interval), tfb(interval)]
-        areas = b.*h
-        heights = [hw(interval)+tfb(interval)+tft(interval)/2, tfb(interval)/2, tfb(interval)+hw(interval)/2]
-        for x_value = xc(interval)+1:xc(interval + 1)
-            y_bar_vector(x_value) = CalculateYBar( areas, heights);
-            I_vector(x_value) = CalcI(b, h, y_bar_vector(x_value), heights - y_bar_vector(x_value));
-        end
-    end
     
 end
 
@@ -159,7 +174,7 @@ function [ SFD, BMD ] = ApplyPL( x, xP, P, xS, S )
     plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
     axis([0, 1250, min(BMD) * 1.2, max(BMD) * 1.2])
     title("Bending Moment Diagram")
-    ylabel("Bending Moment (Nm) (tension on bottom is positive)")
+    ylabel("Bending Moment (Nmm) (tension on bottom is positive)")
     xlabel("Position (mm)")
     hold off
 end 
@@ -217,17 +232,38 @@ end
 %     b = {Sectional Properties}; 
 
 function [Qcent] = CalcQcent(top_areas, local_centroidal_heights) %calculating from the top , calculate local_centroidal_heights of the top half of the structure beforehand 
-    Qcent = sum(areas.*((local_centroidal_heights)))
+    Qcent = nan(1,1250); %rows of the top_areas are the areas for individual cross section 
+    
+    for i = 1:1250
+        Qcent(i) = top_areas(i)*local_centroidal_heights(i)
+    end
+    
+    
 end
+
 %  function [ {Sectional Properties} ] = SectionProperties( {Geometric Inputs} ) % Calculates important sectional properties. Including but not limited to ybar, I, Q, etc. 
 % % Input: Geometric Inputs. Format will depend on user 
 % % Output: Sectional Properties at every value of x. Each property is a 1-D array of length n 
 %  
-function [ V_fail ] = CalcVfail( Qcent, I, b, TauU ) 
+
+function [ P_fail ] = CalcVfail( Qcent, I, b, Shear_failure, SFD) %need to be able to accomodate for Qglue as well 
 % % Calculates shear forces at every value of x that would cause a matboard shear failure 
 % % Input: Sectional Properties (list of 1-D arrays), TauU (scalar material property) 
-% % Output: V_fail a 1-D array of length n 
-     V_fail = TauU .* I .* b ./ Qcent;  %give out result in newtons 
+% % Output: V_fail0)
+    V_fail = nan(1,1250)
+
+    P_fail = nan(1,1250)
+    for i = 1:1250
+        V_fail(i) = Shear_failure .* I(i) .* b(i) ./ Qcent(i);
+        if SFD(i) == 0
+            P_fail(i) = 0;
+        else
+            P_fail(i) = V_fail(i) ./ SFD(i)
+            
+        end
+        %give out result in newtons 
+    end
+               
 end 
 
 function [ybot, ytop] = CalcYbotYtop(height, y_bar)
@@ -237,25 +273,28 @@ end
 
 
 
-function [ M_MatT ] = MfailMatT( ybot, ytop, I, SigT, BMD )  
+function [ P_fail_tension ] = MfailMatT( ybot, ytop, I, SigT, BMD )  
 % % Calculates bending moments at every value of x that would cause a matboard tension failure 
 % % Input: Sectional Properties (list of 1-D arrays), SigT (material property), BMD (1-D array) 
 % % Output: M_MatT a 1-D array of length n 
-    M_MatT = zeros(1,1250)
-    for i = 1 : length(x)    
-            if BMD(i) > 0 % If the moment is positive, the tension failure will be at the bottom 
-                M_MatT(i) = SigT * I(i) / ybot(i); 
-            elseif BMD(i) < 0 % If the moment is negative, the tension failure will be at the top 
-                M_MatT(i) = -SigT * I(i) / ytop(i); 
-            end 
+    M_fail_tension = zeros(1,1250);
+    for i = 1 : 1250    
+        if BMD(i) > 0 % If the moment is positive, the tension failure will be at the bottom 
+            M_fail_tension(i) = SigT * I(i) / ybot(i); 
+        elseif BMD(i) < 0 % If the moment is negative, the tension failure will be at the top 
+            M_fail_tension(i) = -SigT * I(i) / ytop(i); 
+        end 
     end 
+    P_fail_tension = M_fail_tension ./ BMD;
+    P_fail_max = max(P_fail_tension);
+
 
 end 
 
-function [ P_fail ] = MfailMatC(ybot, ytop, I, Stress_fail, BMD) % Similar to MfailMatT 
+function [ P_fail_compression ] = MfailMatC(ybot, ytop, I, Stress_fail, BMD) % Similar to MfailMatT 
       M_fail = zeros(1,1250)
       
-      for i = 1 : length(x)    
+      for i = 1 : 1250
             if BMD(i) > 0 % If the moment is positive, the tension failure will be at the bottom 
                 M_fail(i) = Stress_fail * I(i) / ytop(i); 
             elseif BMD(i) < 0 % If the moment is negative, the tension failure will be at the top 
@@ -263,7 +302,9 @@ function [ P_fail ] = MfailMatC(ybot, ytop, I, Stress_fail, BMD) % Similar to Mf
             end 
       end 
       
-      P_fail = M_fail ./ BMD
+      P_fail_compression = M_fail ./ BMD;
+      P_fail_max = max(P_fail_compression);
+
 
 end
 %  function [ M_Buck ] = MfailBuck( {Sectional Properties}, E, mu, BMD )  
