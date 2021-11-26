@@ -77,24 +77,47 @@ areas = b.*h
 distances = [(75-1.27/2) 75-1.27-(1.27/2) 75-1.27-(1.27/2) (75-1.27)/2 (75-1.27)/2 1.27/2]
 
 y_bar = CalculateYBar(areas, distances)
+y_vector = repmat(y_bar, 1250, 1)
 I = CalcI(b,h,y_bar, distances)
 [y_bar_vector, I_vector] = Calc_Cross_Section_Properties(xc, bft, tft, hw, tw, spacing_web, bfb, tfb, a)
 
-top_areas = [1.27*100 1.27*10 1.27*10 (75-(1.27*2)-y_bar)*1.27 (75-(1.27*2)-y_bar)*1.27]
-top_dist_from_centroid = [(75-1.27/2)-y_bar, 75-1.27-(1.27/2)-y_bar, 75-1.27-(1.27/2)-y_bar, (75-2*1.27-y_bar)/2 (75-2*1.27-y_bar)/2] 
-top_areas = repmat(top_areas,1250,1)
-top_dist_from_centroid = repmat(top_dist_from_centroid,1250,1)
+bottom_areas_real = [80*1.27 (y_vector(1,1)-1.27).*(1.27) (y_vector(1,1)-1.27).*(1.27)];
+bottom_areas = [80*1.27 (y_bar_vector(1,1)-1.27).*(1.27) (y_bar_vector(1,1)-1.27).*(1.27)];
+bottom_dist_from_centroid_real = [tfb(1,1)/2-y_vector(1,1) (y_vector(1,1)-tfb(1,1))./2-y_vector(1,1) (y_vector(1,1)-tfb(1,1))./2-y_vector(1,1)];
+bottom_dist_from_centroid = [tfb(1,1)/2-y_bar_vector(1,1) (y_bar_vector(1,1)-tfb(1,1))./2-y_bar_vector(1,1) (y_bar_vector(1,1)-tfb(1,1))./2-y_bar_vector(1,1)]; 
+bottom_areas = repmat(bottom_areas,1250,1);
+bottom_areas_real = repmat(bottom_areas_real,1250,1)
+bottom_dist_from_centroid_real = repmat(bottom_dist_from_centroid_real,1250,1)
+
+bottom_dist_from_centroid = repmat(bottom_dist_from_centroid,1250,1)
 b = repmat(1.27,1250,1)
 I_vec = I*ones(1,1250) %let I be constant for design zero 
-Qcent = CalcQcent(top_areas, top_dist_from_centroid);%for debugging, for design 0 
+
+Qcent = CalcQcent(bottom_areas_real, bottom_dist_from_centroid_real);%for debugging, for design 0 
 Vfail = CalcVfail(Qcent, I_vec, b, TauU, SFD); %for debugging, for design 0
-[Ybot, Ytop] = CalcYbotYtop(75, y_bar)
-Ybot_vec = Ybot*ones(1,1250)
-Ytop_vec = Ytop*ones(1,1250)
+[Ybot, Ytop] = CalcYbotYtop(75, y_bar);
+Ybot_vec = Ybot*ones(1,1250);
+Ytop_vec = Ytop*ones(1,1250);
 
-M_MatT = MfailMatT(Ybot_vec, Ytop_vec, I_vec, SigT, BMD) %insert Ybot, Ytop, I as vectors 
-M_MatC = MfailMatC(Ybot_vec, Ytop_vec, I_vec, SigT, BMD) %insert Ybot, Ytop, I as vectors 
+%%%
+hweb = [75-1.27*2, 75-1.27*2, 75-1.27*2];
+diaphragm_spacing = [550 510 190]
+I_v = I_vec(1:4)
+[P_buck, VBuck] = Calc_VBuck(tw, hweb, diaphragm_spacing, mu, SFD,I_v, b(1:4), Qcent(1:4))%for design 0 
+%%%
 
+%%%
+[P_tension, MatT] = MfailMatT(Ybot_vec, Ytop_vec, I_vec, SigT, BMD) %insert Ybot, Ytop, I as vectors 
+[P_compression, MatC] = MfailMatC(Ybot_vec, Ytop_vec, I_vec, SigC, BMD) %insert Ybot, Ytop, I as vectors 
+[P_shear, VFail] = CalcVfail(Qcent, I_vector, b, TauU, SFD);
+%%%
+
+%%% 
+P = 200
+P_fail = FailLoad(P,SFD, BMD, P_shear, P_buck, P_tension, P_compression)
+BMD(675)
+
+VisualizePL(P,SFD, BMD, VFail, VBuck, MatT, MatC)  
 
 function [ y_bar ] = CalculateYBar (areas, distances)
     y_bar = sum((areas .* distances)) / sum(areas);
@@ -156,8 +179,12 @@ function [ SFD, BMD ] = ApplyPL( x, xP, P, xS, S )
     %BMD(dist_A_to_B) = BMD(xP)-SFD(xP).*(dist_A_to_B-xP(i))
     
     % PLOT SFD
-    SFD(1) = 0; % Just to make the graph pretty
-    SFD(end) = 0;
+    %SFD(1) = 0; % Just to make the graph pretty
+    %SFD(end) = 0;
+    max_SFD = max(SFD)
+    max_BMD = max(BMD)
+    min_SFD = min(SFD)
+    min_BMD = min(BMD)
     plot(x,SFD, "b")
     hold on
     plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
@@ -170,6 +197,7 @@ function [ SFD, BMD ] = ApplyPL( x, xP, P, xS, S )
     % PLOT BMD
     figure
     plot(x,BMD,"r")
+    set(gca, 'YDir','reverse')
     hold on
     plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
     axis([0, 1250, min(BMD) * 1.2, max(BMD) * 1.2])
@@ -233,10 +261,9 @@ end
 
 function [Qcent] = CalcQcent(top_areas, local_centroidal_heights) %calculating from the top , calculate local_centroidal_heights of the top half of the structure beforehand 
     Qcent = nan(1,1250); %rows of the top_areas are the areas for individual cross section 
-    
-    for i = 1:1250
-        Qcent(i) = top_areas(i)*local_centroidal_heights(i)
-    end
+    test = top_areas .* local_centroidal_heights;
+    Qcent = abs(sum(test,2));
+ 
     
     
 end
@@ -246,19 +273,19 @@ end
 % % Output: Sectional Properties at every value of x. Each property is a 1-D array of length n 
 %  
 
-function [ P_fail ] = CalcVfail( Qcent, I, b, Shear_failure, SFD) %need to be able to accomodate for Qglue as well 
+function [ P_fail, V_fail] = CalcVfail( Qcent, I, b, Shear_failure, SFD) %need to be able to accomodate for Qglue as well 
 % % Calculates shear forces at every value of x that would cause a matboard shear failure 
 % % Input: Sectional Properties (list of 1-D arrays), TauU (scalar material property) 
 % % Output: V_fail0)
-    V_fail = nan(1,1250)
-
-    P_fail = nan(1,1250)
+    V_fail = nan(1,1250);
+    P_fail = nan(1,1250);
     for i = 1:1250
+        
         V_fail(i) = Shear_failure .* I(i) .* b(i) ./ Qcent(i);
         if SFD(i) == 0
             P_fail(i) = 0;
         else
-            P_fail(i) = V_fail(i) ./ SFD(i)
+            P_fail(i) = V_fail(i) ./ SFD(i);
             
         end
         %give out result in newtons 
@@ -267,13 +294,13 @@ function [ P_fail ] = CalcVfail( Qcent, I, b, Shear_failure, SFD) %need to be ab
 end 
 
 function [ybot, ytop] = CalcYbotYtop(height, y_bar)
-    ybot = y_bar
+    ybot = y_bar;
     ytop = height - y_bar
 end
 
 
 
-function [ P_fail_tension ] = MfailMatT( ybot, ytop, I, SigT, BMD )  
+function [ P_fail_tension, M_fail_tension ] = MfailMatT( ybot, ytop, I, SigT, BMD )  
 % % Calculates bending moments at every value of x that would cause a matboard tension failure 
 % % Input: Sectional Properties (list of 1-D arrays), SigT (material property), BMD (1-D array) 
 % % Output: M_MatT a 1-D array of length n 
@@ -282,8 +309,8 @@ function [ P_fail_tension ] = MfailMatT( ybot, ytop, I, SigT, BMD )
         if BMD(i) > 0 % If the moment is positive, the tension failure will be at the bottom 
             M_fail_tension(i) = SigT * I(i) / ybot(i); 
         elseif BMD(i) < 0 % If the moment is negative, the tension failure will be at the top 
-            M_fail_tension(i) = -SigT * I(i) / ytop(i); 
-        end 
+            M_fail_tension(i) = -SigT * I(i) / ytop(i);
+        end
     end 
     P_fail_tension = M_fail_tension ./ BMD;
     P_fail_max = max(P_fail_tension);
@@ -291,7 +318,7 @@ function [ P_fail_tension ] = MfailMatT( ybot, ytop, I, SigT, BMD )
 
 end 
 
-function [ P_fail_compression ] = MfailMatC(ybot, ytop, I, Stress_fail, BMD) % Similar to MfailMatT 
+function [ P_fail_compression, M_fail] = MfailMatC(ybot, ytop, I, Stress_fail, BMD) % Similar to MfailMatT 
       M_fail = zeros(1,1250)
       
       for i = 1 : 1250
@@ -303,21 +330,135 @@ function [ P_fail_compression ] = MfailMatC(ybot, ytop, I, Stress_fail, BMD) % S
       end 
       
       P_fail_compression = M_fail ./ BMD;
-      P_fail_max = max(P_fail_compression);
-
 
 end
+
+function [Force_Buck_vec, v_buck_vec] = Calc_VBuck(t,h,a,mu,SFD,I,b,Qcent)
+        stress_buck = nan(1,length(h));
+
+        v_buck = nan(1,length(h));
+        Force_Buck = nan(1,length(h));
+        Force_Buck_vec = nan(1,1250);
+        
+        index = cumsum(a);
+
+        E = 4000 %modulus of elasiticity 
+        for i = 1:length(v_buck)
+            stress_buck(i) = 5*pi.^2*E./(12*(1-mu.^2)).*((t(i)/h(i)).^2+(t(i)./a(i)).^2);
+            v_buck(i) = stress_buck(i).* I(i) .* b(i) ./ Qcent(i);
+            Force_Buck(i) = v_buck(i)./abs(SFD(index(i)));        
+        end 
+        Force_Buck_vec(1:index(1)) = Force_Buck(1);
+        Force_Buck_vec(index(1):index(2)) = Force_Buck(2);
+        Force_Buck_vec(index(2):index(3)) = Force_Buck(3);
+        v_buck_vec(1:index(1)) = v_buck(1);
+        v_buck_vec(index(1):index(2)) = v_buck(2);
+        v_buck_vec(index(2):index(3)) = v_buck(3);
+        
+end 
+
 %  function [ M_Buck ] = MfailBuck( {Sectional Properties}, E, mu, BMD )  
 % % Calculates bending moments at every value of x that would cause a buckling failure 
 % % Input: Sectional Properties (list of 1-D arrays), E, mu (material property), BMD (1-D array) 
 % % Output: M_MatBuck a 1-D array of length n 
-%  function [ Pf ] = FailLoad( P, SFD, BMD, V_Mat, V_Buck, M_MatT, M_MatC, M_Buck1, M_Buck2, M_Buck3 )  
+function [ Pf ] = FailLoad( P,SFD, BMD, P_shear, P_buck, P_tension, P_compression)  %M_Buck1, M_Buck2, M_Buck3 calculate m buck afterwords 
+    min_P_shear = min(abs(P_shear));
+    min_P_buck = min(abs(P_buck));
+    min_P_tension = min(abs(P_tension));
+    min_P_compression = min(abs(P_compression));
+    min_Ps = [min_P_shear, min_P_buck, min_P_tension,min_P_compression];
+    if P > min_P_shear | P > min_P_buck | P > min_P_tension | P > min_P_compression
+        Pf = min(min_Ps);
+    else
+        Pf = 0;
+    end 
+end 
+    
 % % Calculates the magnitude of the load P that will cause one of the failure mechanisms to occur 
 % % Input: SFD, BMD under the currently applied points loads (P) (each 1-D array of length n) 
 % %  {V_Mat, V_Glue, ... M_MatT, M_MatC, ... } (each 1-D array of length n) 
 % % Output: Failure Load value Pf 
-%  function [] = VisualizePL(x, SFD, BMD, V_Mat, V_Buck, M_MatT, M_MatC, M_Buck1, M_Buck2,..., Pf)  
+function [] = VisualizePL(P,SFD, BMD, Vfail, Vbuck, M_MatT, M_MatC)  
+    n = 1250;                  % Number of locations to evaluate bridge failure 
+    L = 1250;                  % Length of bridge 
+    x = linspace(0, L, n); 
+    
+    subplot(2,2,1)
+    plot(x,Vfail,"r")
+    hold on 
+    plot(x,-Vfail,"r")
+    
+    
+    hold on 
+    plot(x,SFD.*P,"k")
+    
+    plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
+    
+    if min(Vfail) < min(SFD)
+        min_y = min(Vfail)
+    else
+        min_y = min(SFD)
+    end 
+    if max(Vfail) > max(SFD)
+        max_y = max(Vbuck)
+    else
+        max_y = max(SFD)
+    end
+    xlim([0,1250])
+    %axis([0, 1250, min_y * 1.2, max_y * 1.2])
+    title("SFD vs Material Shear Failures")
+    legend("Matboard Shear Failure")
+
+    hold off    
+    
+    
+    
+    subplot(2,2,2)
+    plot(x,Vbuck,"r")
+    hold on 
+    plot(x,-Vbuck,"r")
+    hold on 
+    plot(x,SFD.*P,"k")
+    plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
+    if min(Vbuck) < min(SFD)
+        min_y = min(Vbuck)
+    else
+        min_y = min(SFD)
+    end 
+    if max(Vbuck) > max(SFD)
+        max_y = max(Vbuck)
+    else
+        max_y = max(SFD)
+    end
+    %axis([0, 1250, min_y * 1.2, max_y * 1.2])
+    xlim([0,1250])
+    title("SFD vs Shear Buckling Failure")
+    legend("Web Shear Buckling Shear Failure")
+    hold off    
+    
+    subplot(2,2,3)
+    plot(x,M_MatT,"r")
+    hold on 
+    plot(x,BMD.*P,"k")
+    hold on 
+    plot(x,M_MatC,"b")
+    plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
+    set(gca, 'YDir','reverse')
+%     min_y = min(M_MatT)
+%     max_y = max(M_MatT)
+%     axis([0, 1250, min_y * 1.2, max_y * 1.2])
+    %axis([0, 1250, min(M_MatT) * 1.2, max(M_MatT) * 1.2])
+    title("BMD vs Material Moment Failures")
+    legend("Matboard Tension Failure")
+    legend("Matboard Compression Shear Failure")
+    
+    xlim([0 1250])
+
+    hold off     
+
+end 
 % % Plots all outputs of design process 
+
 %  function [ Defls ] = Deflections( x, BMD, I, E )  
 % % Calculates deflections 
 % % Input: I(1-D arrays), E (material property), BMD (1-D array) 
