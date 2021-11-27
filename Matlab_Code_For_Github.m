@@ -18,6 +18,12 @@ P = [1, 1];
 xS = [0, 1060];
 S = [0, 0];
 [S(1), S(2)] = CalcSupportForces( xP, P, xS );
+S_train = nan(1,2)
+xP_train = [102 278 442 618 782 958]%position of forces applied in between A and B
+P_train = [1 1 1 1 1 1]
+[S(1), S(2)] = CalcSupportForces( xP, P, xS );
+[S_train(1), S_train(2)] = CalcSupportForces(xP_train, P_train, xS)
+[SFD_train_center, BMD_train_center] = ApplyPL_train(x,xP_train,P_train,xS,S_train);
 
   
 %% 2. Define cross-sections 
@@ -176,6 +182,47 @@ end
 function [ BMD ] = CalculateBMD(SFD, x)
     BMD = cumsum(SFD)*((x(2)-x(1))/1) % Convert to mm
 end
+function [SFD, BMD] = ApplyPL_train(x,xP,P,xS, S)
+    dist_A_to_B = xS(2) - xS(1)
+    SFD = S(1)*ones(1,1250)
+    for i = 1:length(xP)
+        if xP(i) >= dist_A_to_B
+            SFD(xP(i):end) = SFD(xP(i):end) + S(2)
+        elseif xP(i) <= dist_A_to_B
+            SFD(xP(i):end) = SFD(xP(i):end) - P(i)
+        end 
+
+        if i == length(P) & xP(length(xP)) <= dist_A_to_B
+            SFD(dist_A_to_B:end) = SFD(dist_A_to_B:end) + S(2)
+        end 
+    end 
+    BMD = CalculateBMD(SFD, x)
+    figure
+    subplot(2,1,1)
+
+    plot(x,SFD, "b")
+    hold on
+    plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
+    axis([0, 1250, min(SFD) * 1.2, max(SFD) * 1.2])
+    title("Shear Force Diagram")
+    ylabel("Shear Force (N) (up on left, down on right is positive)")
+    xlabel("Position (mm)")
+    hold off    
+    
+    % PLOT BMD
+    subplot(2,1,2)
+
+    plot(x,BMD,"r")
+    set(gca, 'YDir','reverse')
+    hold on
+
+    plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
+    axis([0, 1250, min(BMD) * 1.2, max(BMD) * 1.2])
+    title("Bending Moment Diagram")
+    ylabel("Bending Moment (Nmm) (tension on bottom is positive)")
+    xlabel("Position (mm)")
+    hold off
+end 
 
 function [ SFD, BMD ] = ApplyPL( x, xP, P, xS, S )
     dist_A_to_B = xS(2) - xS(1)
@@ -183,18 +230,11 @@ function [ SFD, BMD ] = ApplyPL( x, xP, P, xS, S )
     SFD(xP:end) = SFD(xP:end)-P(1)
     SFD(dist_A_to_B:end) = SFD(dist_A_to_B:end) + S(2)
 
-    %want to plot BMD and SFD 
     BMD = CalculateBMD(SFD, x)
-    %BMD(xP) = BMD(1)-SFD(xP).*xP
-    %BMD(dist_A_to_B) = BMD(xP)-SFD(xP).*(dist_A_to_B-xP(i))
-    
+
     % PLOT SFD
     %SFD(1) = 0; % Just to make the graph pretty
     %SFD(end) = 0;
-    max_SFD = max(SFD)
-    max_BMD = max(BMD)
-    min_SFD = min(SFD)
-    min_BMD = min(BMD)
     plot(x,SFD, "b")
     hold on
     plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
