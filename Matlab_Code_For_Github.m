@@ -38,7 +38,7 @@ VisualizeBridge( xc, bft, tft, hw, tw, spacing_web, bfb, tfb, a );
 
 %[SFD_PL, BMD_PL] = ApplyPL(550, P, x, SFD_PL);      % Construct SFD, BMD 
 %[SFD_PL, BMD_PL] = ApplyPL(L, P, x, SFD_PL);        % Construct SFD, BMD 
-[SFD, BMD] = ApplyPLs(x,xP,P,xS,S)
+[SFD, BMD] = ApplyPL(x,xP,P,xS,S);
 
 
 %% 3. Define Material Properties 
@@ -72,9 +72,12 @@ bottom_dist_from_centroid_real = repmat(bottom_dist_from_centroid_real,1250,1)
 bottom_dist_from_centroid = repmat(bottom_dist_from_centroid,1250,1)
 b = repmat(1.27,1250,1)
 I_vec = I*ones(1,1250) %let I be constant for design zero 
-
+top_area = 1.27*100
+top_area = repmat(top_area, 1250, 1)
+top_dist_from_centroid = 75-1.25/2-y_vector(1,1)
+top_dist_from_centroid = repmat(top_dist_from_centroid, 1250, 1)
 Qcent = CalcQcent(bottom_areas_real, bottom_dist_from_centroid_real);%for debugging, for design 0 
-Vfail = CalcVfail(Qcent, I_vec, b, TauU, SFD); %for debugging, for design 0
+Qglue = CalcQglue(top_area, top_dist_from_centroid)
 [Ybot, Ytop] = CalcYbotYtop(75, y_bar);
 Ybot_vec = Ybot*ones(1,1250);
 Ytop_vec = Ytop*ones(1,1250);
@@ -136,6 +139,9 @@ I_v = I_vec(1:4)
 [P_tension, MatT] = MfailMatT(Ybot_vec, Ytop_vec, I_vec, SigT, BMD) %insert Ybot, Ytop, I as vectors 
 [P_compression, MatC] = MfailMatC(Ybot_vec, Ytop_vec, I_vec, SigC, BMD) %insert Ybot, Ytop, I as vectors 
 [P_shear, VFail] = CalcVfail(Qcent, I_vector, b, TauU, SFD);
+b_glue = repmat((10+1.27)*2,1250,1) %base length of the glue portion 
+
+[P_shear_glue, VFail_glue] = CalcVfail(Qglue, I_vector, b_glue, TauG, SFD);
 %%%
 
 %%% 
@@ -146,7 +152,7 @@ P_fail = FailLoad(P,SFD, BMD, P_shear, P_buck, P_tension, P_compression)
 BMD(675)
 t = repmat(1.27, 1250, 1)
 %[P_fail_buckle, M_fail_buckle] = MfailBuck(t,I, case_num, E, BMD, Ytop_vec, Ybot_vec)  
-VisualizePL(P,SFD, BMD, VFail, VBuck, MatT, MatC)  
+VisualizePL(P,SFD, BMD, VFail, VBuck, MatT, MatC, VFail_glue)  
 defls = Deflections(BMD, I_vec, E , 200) 
 
 
@@ -161,14 +167,14 @@ end
 
 %%%%%%%%%%%%%%%%%ADD CALCULATION FOR DIAPHRAMS
 function [ y_bar_vector, I_vector ] = Calc_Cross_Section_Properties(xc, bft, tft, hw, tw, spacing_web, bfb, tfb, a)
-    I_vector = zeros(1,xc(end));
-    y_bar_vector = zeros(1,xc(end));
+    I_vector = zeros(1,xc(end))
+    y_bar_vector = zeros(1,xc(end))
     for interval = 1:length(xc) - 1
         % Assume Flaps used for gluing are not significant
         %    Base of top,   total base of web, base of bot
-        b = [bft(interval), tw(interval), tw(interval), bfb(interval)];
-        h = [tft(interval), hw(interval), hw(interval), tfb(interval)];
-        areas = b.*h;
+        b = [bft(interval), tw(interval), tw(interval), bfb(interval)]
+        h = [tft(interval), hw(interval), hw(interval), tfb(interval)]
+        areas = b.*h
         heights = [hw(interval)+tfb(interval)+tft(interval)/2, (tfb(interval)+hw(interval))/2, (tfb(interval)+hw(interval))/2, tfb(interval)/2];
         for x_value = xc(interval)+1:xc(interval + 1)
             y_bar_vector(x_value) = CalculateYBar( areas, heights);
@@ -190,31 +196,25 @@ end
 
 function [ Ay, By ] = CalcSupportForces( xP, P, xS )
     % Calculate the support forces in "N"s
-    By = sum((xP-xS(1)).*P) / xS(2) - xS(1);
+    By = sum((xP-xS(1)).*P) / xS(2) - xS(1)
     %By = sum((xP - dist_A_to_B).*P) % Clockwise Positive
-    Ay = sum(P)-By;
+    Ay = sum(P)-By
 end
 
 function [ BMD ] = CalculateBMD(SFD, x)
-    BMD = cumsum(SFD)*((x(2)-x(1))/1); % Convert to mm
+    BMD = cumsum(SFD)*((x(2)-x(1))/1) % Convert to mm
 end
 
-function [ SFD ] = Apply_Single_PL(SFD, xP, P)
-    SFD(xP+1:end) = SFD(xP+1:end) + P;
-end
+function [ SFD, BMD ] = ApplyPL( x, xP, P, xS, S )
+    dist_A_to_B = xS(2) - xS(1)
+    SFD = S(1)*ones(1,1250)
+    SFD(xP:end) = SFD(xP:end)-P(1)
+    SFD(dist_A_to_B:end) = SFD(dist_A_to_B:end) + S(2)
 
-
-function [ SFD, BMD ] = ApplyPLs( x, xP, P, xS, S )
-    SFD = zeros(1,1250);
-    for i = 1:length(S)
-        SFD = Apply_Single_PL(SFD, xS(i), S(i));
-    end
-    for i = 1:length(P)
-        SFD = Apply_Single_PL(SFD, xP(i), -P(i));
-    end
+    %want to plot BMD and SFD 
     BMD = CalculateBMD(SFD, x)
-    
-    %want to plot BMD and SFD
+    %BMD(xP) = BMD(1)-SFD(xP).*xP
+    %BMD(dist_A_to_B) = BMD(xP)-SFD(xP).*(dist_A_to_B-xP(i))
     
     % PLOT SFD
     %SFD(1) = 0; % Just to make the graph pretty
@@ -301,11 +301,10 @@ function [Qcent] = CalcQcent(top_areas, local_centroidal_heights) %calculating f
     Qcent = nan(1,1250); %rows of the top_areas are the areas for individual cross section 
     test = top_areas .* local_centroidal_heights;
     Qcent = abs(sum(test,2));
- 
-    
-    
 end
-
+function [Qglue] = CalcQglue(top_area, local_centroidal_height)
+    Qglue = top_area.*local_centroidal_height
+end 
 %  function [ {Sectional Properties} ] = SectionProperties( {Geometric Inputs} ) % Calculates important sectional properties. Including but not limited to ybar, I, Q, etc. 
 % % Input: Geometric Inputs. Format will depend on user 
 % % Output: Sectional Properties at every value of x. Each property is a 1-D array of length n 
@@ -503,7 +502,7 @@ end
 % % Input: SFD, BMD under the currently applied points loads (P) (each 1-D array of length n) 
 % %  {V_Mat, V_Glue, ... M_MatT, M_MatC, ... } (each 1-D array of length n) 
 % % Output: Failure Load value Pf 
-function [] = VisualizePL(P,SFD, BMD, Vfail, Vbuck, M_MatT, M_MatC)  
+function [] = VisualizePL(P,SFD, BMD, Vfail, Vbuck, M_MatT, M_MatC, VFail_glue)  
     n = 1250;                  % Number of locations to evaluate bridge failure 
     L = 1250;                  % Length of bridge 
     x = linspace(0, L, n); 
@@ -518,16 +517,6 @@ function [] = VisualizePL(P,SFD, BMD, Vfail, Vbuck, M_MatT, M_MatC)
     plot(x,SFD.*P,"k")
     plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
     
-%     if min(Vfail) < min(SFD)
-%         min_y = min(Vfail)
-%     else
-%         min_y = min(SFD)
-%     end 
-%     if max(Vfail) > max(SFD)
-%         max_y = max(Vbuck)
-%     else
-%         max_y = max(SFD)
-%     end
     xlim([0,1250])
     %axis([0, 1250, min_y * 1.2, max_y * 1.2])
     title("SFD vs Material Shear Failures")
@@ -542,19 +531,13 @@ function [] = VisualizePL(P,SFD, BMD, Vfail, Vbuck, M_MatT, M_MatC)
     hold on 
     plot(x,-Vbuck,"r")
     hold on 
+    if min(VFail_glue) < min(Vbuck) % would plot the glue shear failure only if hte value is less than Vbuck 
+        plot(x,VFail_glue, "b")
+        hold on 
+    end 
     plot(x,SFD.*P,"k")
     plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
-%     if min(Vbuck) < min(SFD)
-%         min_y = min(Vbuck)
-%     else
-%         min_y = min(SFD)
-%     end 
-%     if max(Vbuck) > max(SFD)
-%         max_y = max(Vbuck)
-%     else
-%         max_y = max(SFD)
-%     end
-    %axis([0, 1250, min_y * 1.2, max_y * 1.2])
+
     xlim([0,1250])
     title("SFD vs Shear Buckling Failure")
     legend("Web Shear Buckling Shear Failure")
@@ -568,10 +551,7 @@ function [] = VisualizePL(P,SFD, BMD, Vfail, Vbuck, M_MatT, M_MatC)
     plot(x,M_MatC,"b")
     plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
     set(gca, 'YDir','reverse')
-%     min_y = min(M_MatT)
-%     max_y = max(M_MatT)
-%     axis([0, 1250, min_y * 1.2, max_y * 1.2])
-    %axis([0, 1250, min(M_MatT) * 1.2, max(M_MatT) * 1.2])
+
     title("BMD vs Material Moment Failures")
     legend("Matboard Tension Failure")
     legend("Matboard Compression Shear Failure")
