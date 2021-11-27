@@ -113,13 +113,15 @@ I_v = I_vec(1:4)
 %%%
 
 %%% 
+
+
 P = 200
 P_fail = FailLoad(P,SFD, BMD, P_shear, P_buck, P_tension, P_compression)
 BMD(675)
 t = repmat(1.27, 1250, 1)
 %[P_fail_buckle, M_fail_buckle] = MfailBuck(t,I, case_num, E, BMD, Ytop_vec, Ybot_vec)  
 VisualizePL(P,SFD, BMD, VFail, VBuck, MatT, MatC)  
-Deflections( x, BMD, I_vec, E , 200) 
+defls = Deflections(BMD, I_vec, E , 200) 
 
 function [ y_bar ] = CalculateYBar (areas, distances)
     y_bar = sum((areas .* distances)) / sum(areas);
@@ -499,10 +501,16 @@ function [] = VisualizePL(P,SFD, BMD, Vfail, Vbuck, M_MatT, M_MatC)
 end 
 % % Plots all outputs of design process 
 
-function [ Defls ] = Deflections( x, BMD, I, E , P)  
-    curvature = BMD./(I.*E).*P
-    %Defls = cumsum((curvature.*x));
+function [ Defl ] = Deflections(BMD, I, E , P)  %x is the position of the midspan 
+    mid = 530
+    a_to_b = 530*2 %midspan 
+    curvature = BMD./(I.*E).*P;
+    curvature(1060)
+    delta_C_A = 1/2*550*curvature(550)*(1/3*550+510)+1/2*curvature(550)*237*(2/3*237+273)+(1/2*curvature(1060)*1/3*(273)*273)
+    delta_mid_A = 1/2*mid*curvature(530)*(1/3*530)
+    Defl = 1/2*delta_C_A - delta_mid_A
 end 
+
 % % Calculates deflections 
 % % Input: I(1-D arrays), E (material property), BMD (1-D array) 
 % % Output: Deflection for every value of x (1-D array) or for the midspan only  
