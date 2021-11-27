@@ -38,7 +38,7 @@ VisualizeBridge( xc, bft, tft, hw, tw, spacing_web, bfb, tfb, a );
 
 %[SFD_PL, BMD_PL] = ApplyPL(550, P, x, SFD_PL);      % Construct SFD, BMD 
 %[SFD_PL, BMD_PL] = ApplyPL(L, P, x, SFD_PL);        % Construct SFD, BMD 
-[SFD, BMD] = ApplyPL(x,xP,P,xS,S);
+[SFD, BMD] = ApplyPLs(x,xP,P,xS,S)
 
 
 %% 3. Define Material Properties 
@@ -119,6 +119,7 @@ BMD(675)
 
 VisualizePL(P,SFD, BMD, VFail, VBuck, MatT, MatC)  
 
+
 function [ y_bar ] = CalculateYBar (areas, distances)
     y_bar = sum((areas .* distances)) / sum(areas);
 end
@@ -129,14 +130,14 @@ end
 
 %%%%%%%%%%%%%%%%%ADD CALCULATION FOR DIAPHRAMS
 function [ y_bar_vector, I_vector ] = Calc_Cross_Section_Properties(xc, bft, tft, hw, tw, spacing_web, bfb, tfb, a)
-    I_vector = zeros(1,xc(end))
-    y_bar_vector = zeros(1,xc(end))
+    I_vector = zeros(1,xc(end));
+    y_bar_vector = zeros(1,xc(end));
     for interval = 1:length(xc) - 1
         % Assume Flaps used for gluing are not significant
         %    Base of top,   total base of web, base of bot
-        b = [bft(interval), tw(interval), tw(interval), bfb(interval)]
-        h = [tft(interval), hw(interval), hw(interval), tfb(interval)]
-        areas = b.*h
+        b = [bft(interval), tw(interval), tw(interval), bfb(interval)];
+        h = [tft(interval), hw(interval), hw(interval), tfb(interval)];
+        areas = b.*h;
         heights = [hw(interval)+tfb(interval)+tft(interval)/2, (tfb(interval)+hw(interval))/2, (tfb(interval)+hw(interval))/2, tfb(interval)/2];
         for x_value = xc(interval)+1:xc(interval + 1)
             y_bar_vector(x_value) = CalculateYBar( areas, heights);
@@ -158,25 +159,31 @@ end
 
 function [ Ay, By ] = CalcSupportForces( xP, P, xS )
     % Calculate the support forces in "N"s
-    By = sum((xP-xS(1)).*P) / xS(2) - xS(1)
+    By = sum((xP-xS(1)).*P) / xS(2) - xS(1);
     %By = sum((xP - dist_A_to_B).*P) % Clockwise Positive
-    Ay = sum(P)-By
+    Ay = sum(P)-By;
 end
 
 function [ BMD ] = CalculateBMD(SFD, x)
-    BMD = cumsum(SFD)*((x(2)-x(1))/1) % Convert to mm
+    BMD = cumsum(SFD)*((x(2)-x(1))/1); % Convert to mm
 end
 
-function [ SFD, BMD ] = ApplyPL( x, xP, P, xS, S )
-    dist_A_to_B = xS(2) - xS(1)
-    SFD = S(1)*ones(1,1250)
-    SFD(xP:end) = SFD(xP:end)-P(1)
-    SFD(dist_A_to_B:end) = SFD(dist_A_to_B:end) + S(2)
+function [ SFD ] = Apply_Single_PL(SFD, xP, P)
+    SFD(xP+1:end) = SFD(xP+1:end) + P;
+end
 
-    %want to plot BMD and SFD 
+
+function [ SFD, BMD ] = ApplyPLs( x, xP, P, xS, S )
+    SFD = zeros(1,1250);
+    for i = 1:length(S)
+        SFD = Apply_Single_PL(SFD, xS(i), S(i));
+    end
+    for i = 1:length(P)
+        SFD = Apply_Single_PL(SFD, xP(i), -P(i));
+    end
     BMD = CalculateBMD(SFD, x)
-    %BMD(xP) = BMD(1)-SFD(xP).*xP
-    %BMD(dist_A_to_B) = BMD(xP)-SFD(xP).*(dist_A_to_B-xP(i))
+    
+    %want to plot BMD and SFD
     
     % PLOT SFD
     %SFD(1) = 0; % Just to make the graph pretty
@@ -463,6 +470,7 @@ end
 % % Calculates deflections 
 % % Input: I(1-D arrays), E (material property), BMD (1-D array) 
 % % Output: Deflection for every value of x (1-D array) or for the midspan only  
+
 
 
 
