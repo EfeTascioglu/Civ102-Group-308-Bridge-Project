@@ -116,8 +116,10 @@ I_v = I_vec(1:4)
 P = 200
 P_fail = FailLoad(P,SFD, BMD, P_shear, P_buck, P_tension, P_compression)
 BMD(675)
-
+t = repmat(1.27, 1250, 1)
+%[P_fail_buckle, M_fail_buckle] = MfailBuck(t,I, case_num, E, BMD, Ytop_vec, Ybot_vec)  
 VisualizePL(P,SFD, BMD, VFail, VBuck, MatT, MatC)  
+Deflections( x, BMD, I_vec, E , 200) 
 
 
 function [ y_bar ] = CalculateYBar (areas, distances)
@@ -364,7 +366,46 @@ function [Force_Buck_vec, v_buck_vec] = Calc_VBuck(t,h,a,mu,SFD,I,b,Qcent)
         
 end 
 
-%  function [ M_Buck ] = MfailBuck( {Sectional Properties}, E, mu, BMD )  
+% function [P_fail, M_fail] = MfailBuck(t,I, case_num, E, BMD, Ytop_vec, Ybot_vec) 
+%     %there are 3 different cases to consider for 8 different plate sections
+%     if case_num == 1
+%         for i = length(BMD)
+%             if BMD(i) < 0
+%                 y_compression = y_top_vec(i)
+%             else 
+%                 y_compression = y_bot_vec(i)
+%             end
+%            
+%             shear_buckle_1(i) = 4.*pi.^2.*E./(12.*(1-0.2.^2).*(t(i)./b(i)).^2)
+%             M_fail_1(i) = shear_buckle_1.*I(i)./y_compression(i)
+%             P_fail_1(i) = M_fail ./BMD(i)
+%         end 
+%     elseif case_num == 2
+%         for i = length(BMD)
+%             if BMD(i) < 0
+%                     y_compression = y_top_vec(i)
+%                 else 
+%                     y_compression = y_bot_vec(i)
+%                 end
+%             shear_buckle_2 = 0.425.*pi.^2.*E./(12.*(1-0.2.^2).*(t./b).^2)
+%             M_fail_3(i) = shear_buckle_1.*I(i)./y_compression(i)
+%             P_fail_3(i) = M_fail ./BMD(i)
+%         end 
+%     elseif case_num == 3
+%         for i = length(BMD)
+%             if BMD(i) < 0
+%                 y_compression = y_top_vec(i)
+%             else 
+%                 y_compression = y_bot_vec(i)
+%             end
+%             shear_buckle_3 = 6.*pi.^2.*E./(12.*(1-0.2.^2).*(t./b).^2)
+%             M_fail_3(i) = shear_buckle_1.*I(i)./y_compression(i)
+%             P_fail_3(i) = M_fail ./BMD(i)
+%         end 
+% 
+%     end
+% 
+% end
 % % Calculates bending moments at every value of x that would cause a buckling failure 
 % % Input: Sectional Properties (list of 1-D arrays), E, mu (material property), BMD (1-D array) 
 % % Output: M_MatBuck a 1-D array of length n 
@@ -398,19 +439,18 @@ function [] = VisualizePL(P,SFD, BMD, Vfail, Vbuck, M_MatT, M_MatC)
     
     hold on 
     plot(x,SFD.*P,"k")
-    
     plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
     
-    if min(Vfail) < min(SFD)
-        min_y = min(Vfail)
-    else
-        min_y = min(SFD)
-    end 
-    if max(Vfail) > max(SFD)
-        max_y = max(Vbuck)
-    else
-        max_y = max(SFD)
-    end
+%     if min(Vfail) < min(SFD)
+%         min_y = min(Vfail)
+%     else
+%         min_y = min(SFD)
+%     end 
+%     if max(Vfail) > max(SFD)
+%         max_y = max(Vbuck)
+%     else
+%         max_y = max(SFD)
+%     end
     xlim([0,1250])
     %axis([0, 1250, min_y * 1.2, max_y * 1.2])
     title("SFD vs Material Shear Failures")
@@ -427,16 +467,16 @@ function [] = VisualizePL(P,SFD, BMD, Vfail, Vbuck, M_MatT, M_MatC)
     hold on 
     plot(x,SFD.*P,"k")
     plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
-    if min(Vbuck) < min(SFD)
-        min_y = min(Vbuck)
-    else
-        min_y = min(SFD)
-    end 
-    if max(Vbuck) > max(SFD)
-        max_y = max(Vbuck)
-    else
-        max_y = max(SFD)
-    end
+%     if min(Vbuck) < min(SFD)
+%         min_y = min(Vbuck)
+%     else
+%         min_y = min(SFD)
+%     end 
+%     if max(Vbuck) > max(SFD)
+%         max_y = max(Vbuck)
+%     else
+%         max_y = max(SFD)
+%     end
     %axis([0, 1250, min_y * 1.2, max_y * 1.2])
     xlim([0,1250])
     title("SFD vs Shear Buckling Failure")
@@ -466,7 +506,10 @@ function [] = VisualizePL(P,SFD, BMD, Vfail, Vbuck, M_MatT, M_MatC)
 end 
 % % Plots all outputs of design process 
 
-%  function [ Defls ] = Deflections( x, BMD, I, E )  
+function [ Defls ] = Deflections( x, BMD, I, E , P)  
+    curvature = BMD./(I.*E).*P
+    %Defls = cumsum((curvature.*x));
+end 
 % % Calculates deflections 
 % % Input: I(1-D arrays), E (material property), BMD (1-D array) 
 % % Output: Deflection for every value of x (1-D array) or for the midspan only  
