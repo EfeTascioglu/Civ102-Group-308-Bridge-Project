@@ -18,17 +18,6 @@ P = [1, 1];
 xS = [0, 1060];
 S = [0, 0];
 [S(1), S(2)] = CalcSupportForces( xP, P, xS );
-S_train = nan(1,2)
-S_train_right = nan(1,2)
-
-xP_train = [102 278 442 618 782 958]%position of forces applied in between A and B
-P_train = [1 1 1 1 1 1]
-xP_train_right = [342 518 682 858 1022 1198]
-[S(1), S(2)] = CalcSupportForces( xP, P, xS );
-[S_train(1), S_train(2)] = CalcSupportForces(xP_train, P_train, xS)
-[S_train_right(1), S_train_right(2)] = CalcSupportForces(xP_train_right, P_train, xS)
-[SFD_center, BMD_center] = ApplyPL_train(x,xP_train,P_train,xS,S_train);
-[SFD_right, BMD_right] = ApplyPL_train(x,xP_train_right,P_train,xS,S_train_right);
 
   
 %% 2. Define cross-sections 
@@ -151,6 +140,7 @@ I_v = I_vec(1:4)
 [P_compression, MatC] = MfailMatC(Ybot_vec, Ytop_vec, I_vec, SigC, BMD) %insert Ybot, Ytop, I as vectors 
 [P_shear, VFail] = CalcVfail(Qcent, I_vector, b, TauU, SFD);
 b_glue = repmat((10+1.27)*2,1250,1) %base length of the glue portion 
+
 [P_shear_glue, VFail_glue] = CalcVfail(Qglue, I_vector, b_glue, TauG, SFD);
 %%%
 
@@ -161,9 +151,8 @@ P = 200
 P_fail = FailLoad(P,SFD, BMD, P_shear, P_buck, P_tension, P_compression)
 BMD(675)
 t = repmat(1.27, 1250, 1)
-P_train_load = 400/6
 %[P_fail_buckle, M_fail_buckle] = MfailBuck(t,I, case_num, E, BMD, Ytop_vec, Ybot_vec)  
-VisualizePL(P,P_train_load ,SFD, BMD, VFail, VBuck, MatT, MatC, VFail_glue, SFD_center, SFD_right, BMD_center, BMD_right)  
+VisualizePL(P,SFD, BMD, VFail, VBuck, MatT, MatC, VFail_glue)  
 defls = Deflections(BMD, I_vec, E , 200) 
 
 
@@ -215,49 +204,6 @@ end
 function [ BMD ] = CalculateBMD(SFD, x)
     BMD = cumsum(SFD)*((x(2)-x(1))/1) % Convert to mm
 end
-function [SFD, BMD] = ApplyPL_train(x,xP,P,xS, S)
-    dist_A_to_B = xS(2) - xS(1)
-    SFD = S(1)*ones(1,1250)
-    for i = 1:length(xP)
-        if xP(i) >= dist_A_to_B
-            SFD(xP(i):end) = SFD(xP(i):end) + S(2)
-        elseif xP(i) <= dist_A_to_B
-            SFD(xP(i):end) = SFD(xP(i):end) - P(i)
-        end 
-
-        if i == length(P) & xP(length(xP)) <= dist_A_to_B
-            SFD(dist_A_to_B:end) = SFD(dist_A_to_B:end) + S(2)
-        end 
-    end 
-    SFD(1250) = 0
-
-    BMD = CalculateBMD(SFD, x)
-    figure
-    subplot(2,1,1)
-
-    plot(x,SFD, "b")
-    hold on
-    plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
-    axis([0, 1250, min(SFD) * 1.2, max(SFD) * 1.2])
-    title("Shear Force Diagram")
-    ylabel("Shear Force (N) (up on left, down on right is positive)")
-    xlabel("Position (mm)")
-    hold off    
-    
-    % PLOT BMD
-    subplot(2,1,2)
-
-    plot(x,BMD,"r")
-    set(gca, 'YDir','reverse')
-    hold on
-
-    plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
-    axis([0, 1250, min(BMD) * 1.2, max(BMD) * 1.2])
-    title("Bending Moment Diagram")
-    ylabel("Bending Moment (Nmm) (tension on bottom is positive)")
-    xlabel("Position (mm)")
-    hold off
-end 
 
 function [ SFD, BMD ] = ApplyPL( x, xP, P, xS, S )
     dist_A_to_B = xS(2) - xS(1)
@@ -265,11 +211,18 @@ function [ SFD, BMD ] = ApplyPL( x, xP, P, xS, S )
     SFD(xP:end) = SFD(xP:end)-P(1)
     SFD(dist_A_to_B:end) = SFD(dist_A_to_B:end) + S(2)
 
+    %want to plot BMD and SFD 
     BMD = CalculateBMD(SFD, x)
-
+    %BMD(xP) = BMD(1)-SFD(xP).*xP
+    %BMD(dist_A_to_B) = BMD(xP)-SFD(xP).*(dist_A_to_B-xP(i))
+    
     % PLOT SFD
     %SFD(1) = 0; % Just to make the graph pretty
     %SFD(end) = 0;
+    max_SFD = max(SFD)
+    max_BMD = max(BMD)
+    min_SFD = min(SFD)
+    min_BMD = min(BMD)
     plot(x,SFD, "b")
     hold on
     plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
@@ -549,7 +502,7 @@ end
 % % Input: SFD, BMD under the currently applied points loads (P) (each 1-D array of length n) 
 % %  {V_Mat, V_Glue, ... M_MatT, M_MatC, ... } (each 1-D array of length n) 
 % % Output: Failure Load value Pf 
-function [] = VisualizePL(P, P_train, SFD, BMD, Vfail, Vbuck, M_MatT, M_MatC, VFail_glue, SFD_Center, SFD_Right, BMD_Center, BMD_Right)  
+function [] = VisualizePL(P,SFD, BMD, Vfail, Vbuck, M_MatT, M_MatC, VFail_glue)  
     n = 1250;                  % Number of locations to evaluate bridge failure 
     L = 1250;                  % Length of bridge 
     x = linspace(0, L, n); 
@@ -558,12 +511,12 @@ function [] = VisualizePL(P, P_train, SFD, BMD, Vfail, Vbuck, M_MatT, M_MatC, VF
     plot(x,Vfail,"r")
     hold on 
     plot(x,-Vfail,"r")
+    
+    
     hold on 
     plot(x,SFD.*P,"k")
-
-    plot(x,SFD_Center.*P_train,"k")
-    hold on 
-    plot(x,SFD_Right.*P_train,"k")
+    plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
+    
     xlim([0,1250])
     %axis([0, 1250, min_y * 1.2, max_y * 1.2])
     title("SFD vs Material Shear Failures")
@@ -583,9 +536,7 @@ function [] = VisualizePL(P, P_train, SFD, BMD, Vfail, Vbuck, M_MatT, M_MatC, VF
         hold on 
     end 
     plot(x,SFD.*P,"k")
-    plot(x,SFD_Center.*P_train,"k")
-    hold on 
-    plot(x,SFD_Right.*P_train,"k")
+    plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
 
     xlim([0,1250])
     title("SFD vs Shear Buckling Failure")
@@ -597,11 +548,6 @@ function [] = VisualizePL(P, P_train, SFD, BMD, Vfail, Vbuck, M_MatT, M_MatC, VF
     hold on 
     plot(x,BMD.*P,"k")
     hold on 
-    plot(x,BMD_Right.*P_train,"k")
-    hold on 
-    plot(x,BMD_Center.*P_train,"k")
-    hold on 
-
     plot(x,M_MatC,"b")
     plot(x, zeros(1, length(x)), "k", "lineWidth", 2)
     set(gca, 'YDir','reverse')
