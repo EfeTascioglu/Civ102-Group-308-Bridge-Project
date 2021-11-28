@@ -1,5 +1,5 @@
 %% 0. Initialize Parameters 
-n = 1250;                  % Number of locations to evaluate bridge failure 
+n = 1250; % Dont change                  % Number of locations to evaluate bridge failure 
 L = 1250;                  % Length of bridge 
 
 %%%%%%%%%%% ALL VALUES ARE IN TERMS OF P, BUT JUST NEED TO WRITE "P" AT THE
@@ -87,6 +87,7 @@ hweb = [75-1.27*2, 75-1.27*2, 75-1.27*2];
 diaphragm_spacing = [550 510 190]
 I_v = I_vec(1:4)
 
+I = 415.69*10^3
 
 %% 1. FLEXURAL FAILURES
 
@@ -98,8 +99,8 @@ I_v = I_vec(1:4)
 
 
 %% 4. PLATE BUCKLING FAILURES
-[P_Plate_Buck, M_Plate_Buck] = Calc_MFail_Buck_Over_Entire_Bridge(xc, bft, tft, hw, tw, spacing_web, bfb, tfb, I_v, E, BMD, y_bar_vector)
-
+[P_Plate_Buck_Vector, M_Plate_Buck_Vector] = Calc_MFail_Buck_Over_Entire_Bridge(xc, bft, tft, hw, tw, spacing_web, bfb, tfb, I_v, E, BMD, y_bar_vector)
+P_Plate_Buck = min(P_Plate_Buck_Vector)
 %% 5. SHEAR BUCKLING FAILURES
 
 
@@ -154,6 +155,7 @@ t = repmat(1.27, 1250, 1)
 %[P_fail_buckle, M_fail_buckle] = MfailBuck(t,I, case_num, E, BMD, Ytop_vec, Ybot_vec)  
 VisualizePL(P,SFD, BMD, VFail, VBuck, MatT, MatC, VFail_glue)  
 defls = Deflections(BMD, I_vec, E , 200) 
+
 
 
 
@@ -407,12 +409,46 @@ function [P_fail, M_fail] = Calc_MFail_Buck_Over_Entire_Bridge(xc, bft, tft, hw,
             if BMD(i) > 0
                 % 5 Plates to check (3 on the top flange, 2 on the webs)
                 % 3 On the Top Flange (Assume that it is symmetrical):
-                % 2 On the Bottom Flange:
-                [potential_P_fail, potential_M_fail] = MfailBuck_Slice(tft(section), (bft(section)- spacing_web(section))/2, I_vector(section), 2, E, BMD(i), tfb(section)+hw(section)+tft(section)/2-y_bar(section), 0.2);
+                % 2 On the webs:
+                
+                % Top Left and top right of the flange
+                if (bft(section)- spacing_web(section))/2 > 0
+                    [potential_P_fail, potential_M_fail] = MfailBuck_Slice(tft(section), (bft(section)- spacing_web(section))/2, I_vector(section), 2, E, BMD(i), tfb(section)+hw(section)+tft(section)/2-y_bar(section), 0.2);
+                    P_fail(i) = min([P_fail(i), potential_P_fail]);
+                    M_fail(i) = min([potential_M_fail, M_fail(i)]);
+                end
+                % Center of the top flange
+                [potential_P_fail, potential_M_fail] = MfailBuck_Slice(tft(section), (spacing_web(section)-2*tw(section)), I_vector(section), 1, E, BMD(i), tfb(section)+hw(section)+tft(section)/2-y_bar(section), 0.2);
                 P_fail(i) = min([P_fail(i), potential_P_fail]);
                 M_fail(i) = min([potential_M_fail, M_fail(i)]);
+                
+                % Webs
+                [potential_P_fail, potential_M_fail] = MfailBuck_Slice(tw(section), tfb(section)+hw(section)-y_bar(section), I_vector(section), 3, E, BMD(i), tfb(section)+hw(section)-y_bar(section), 0.2);
+                P_fail(i) = min([P_fail(i), potential_P_fail]);
+                M_fail(i) = min([potential_M_fail, M_fail(i)]);
+                
             else % Compression at the bottom
-            
+                % 5 Plates to check (3 on the bottom flange, 2 on the webs)
+                % 3 On the Bottom Flange (Assume that it is symmetrical):
+                % 2 On the webs:
+                
+                % Bottom Left and Bottom right of the flange
+                if (bfb(section)- spacing_web(section))/2 > 0
+                    [potential_P_fail, potential_M_fail] = MfailBuck_Slice(tfb(section), (bfb(section)- spacing_web(section))/2, I_vector(section), 2, E, -BMD(i), y_bar(section)-tfb(section/2), 0.2);
+                    P_fail(i) = min([P_fail(i), potential_P_fail]);
+                    M_fail(i) = min([potential_M_fail, M_fail(i)]);
+                end
+                Center of the Bottom flange
+                [potential_P_fail, potential_M_fail] = MfailBuck_Slice(tfb(section), (spacing_web(section)-2*tw(section)), I_vector(section), 1, E, -BMD(i), y_bar(section), 0.2)
+                P_fail(i) = min([P_fail(i), potential_P_fail]);
+                M_fail(i) = min([potential_M_fail, M_fail(i)]);
+                
+                % Webs
+                [potential_P_fail, potential_M_fail] = MfailBuck_Slice(tw(section), y_bar(section)-tfb(section), I_vector(section), 3, E, -BMD(i), y_bar(section)-tfb(section), 0.2);
+                P_fail(i) = min([P_fail(i), potential_P_fail]);
+                M_fail(i) = min([potential_M_fail, M_fail(i)]);
+                
+                
             end
         end
     end
@@ -428,11 +464,11 @@ end
 
 function [P_fail, M_fail] = MfailBuck_Slice(thickness,width, I, case_num, E, Moment, y_to_centroid, poisson)
     if case_num == 1
-        sigma_crit = (4 * (pi ^ 2) * E) / (12 * (1 - poisson))  * ((thickness/width) ^ 2);
+        sigma_crit = ((4 * (pi ^ 2) * E) / (12 * (1 - poisson^2)))  * ((thickness/width) ^ 2);
     elseif case_num == 2
-        sigma_crit = (0.425 * (pi ^ 2) * E) / (12 * (1 - poisson))  * ((thickness/width) ^ 2);
+        sigma_crit = ((0.425 * (pi ^ 2) * E) / (12 * (1 - poisson^2)))  * ((thickness/width) ^ 2);
     else
-        sigma_crit = (6 * (pi ^ 2) * E) / (12 * (1 - poisson))  * ((thickness/width) ^ 2);
+        sigma_crit = ((6 * (pi ^ 2) * E) / (12 * (1 - poisson^2)))  * ((thickness/width) ^ 2);
     end
     M_fail = sigma_crit * I / y_to_centroid;
     P_fail = M_fail/Moment;
@@ -576,5 +612,6 @@ end
 % % Calculates deflections 
 % % Input: I(1-D arrays), E (material property), BMD (1-D array) 
 % % Output: Deflection for every value of x (1-D array) or for the midspan only  
+
 
 
